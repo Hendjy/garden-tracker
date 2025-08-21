@@ -35,7 +35,6 @@ function GardenHarvestTrackerApp() {
     } else {
       setGrid(Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ plantId: null }))));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Keep grid in sync when rows/cols change
@@ -159,7 +158,6 @@ function GardenHarvestTrackerApp() {
   // UI
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
-      {/* Header */}
       <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-slate-200">
         <div className="max-w-7xl mx-auto p-4 flex items-center gap-3">
           <span className="text-2xl">🪴</span>
@@ -174,7 +172,6 @@ function GardenHarvestTrackerApp() {
       </header>
 
       <main className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left: Parcel */}
         <section className="lg:col-span-2">
           <div className="bg-white rounded-2xl shadow p-4">
             <div className="flex items-center justify-between mb-3">
@@ -189,7 +186,6 @@ function GardenHarvestTrackerApp() {
                 <button className="px-2 py-1 rounded bg-slate-100 border" onClick={()=>setGrid(Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ plantId: null }))))}>Vider</button>
               </div>
             </div>
-
             <div className="overflow-auto border rounded-xl">
               <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(40px, 1fr))` }}>
                 {grid.map((row, r) => row.map((cell, c) => {
@@ -215,43 +211,13 @@ function GardenHarvestTrackerApp() {
               <p className="text-xs text-slate-500 mt-2">Cellule sélectionnée: L{selectedCell.r+1} C{selectedCell.c+1}</p>
             )}
           </div>
-
-          {/* Weather */}
-          <div className="bg-white rounded-2xl shadow p-4 mt-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Météo (Open-Meteo) – Pluie (mm)</h2>
-              <div className="flex gap-2 text-sm items-center">
-                <label className="flex items-center gap-1">Lat
-                  <input type="number" step="0.0001" className="w-24 px-2 py-1 border rounded" value={weather.lat} onChange={(e)=>setWeather(w=>({...w,lat:Number(e.target.value)}))}/>
-                </label>
-                <label className="flex items-center gap-1">Lon
-                  <input type="number" step="0.0001" className="w-24 px-2 py-1 border rounded" value={weather.lon} onChange={(e)=>setWeather(w=>({...w,lon:Number(e.target.value)}))}/>
-                </label>
-                <label className="flex items-center gap-1">Jours
-                  <input type="number" min={1} max={60} className="w-16 px-2 py-1 border rounded" value={weather.days} onChange={(e)=>setWeather(w=>({...w,days:Number(e.target.value)||14}))}/>
-                </label>
-                <button className="px-3 py-1.5 rounded-lg bg-slate-900 text-white" onClick={fetchWeather} disabled={weather.loading}>{weather.loading?"…":"Récupérer"}</button>
-              </div>
-            </div>
-            {weather.error && <p className="text-sm text-red-600 mt-2">Erreur météo: {weather.error}</p>}
-            <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
-              {weather.daily.map((d) => (
-                <div key={d.date} className="p-2 rounded-lg border text-center">
-                  <div className="text-xs text-slate-500">{d.date}</div>
-                  <div className="text-lg font-semibold">{d.rain_mm?.toFixed?.(1) ?? d.rain_mm}</div>
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
 
-        {/* Right: Sidebar */}
         <section>
           <div className="bg-white rounded-2xl shadow p-4">
             <h2 className="text-lg font-semibold mb-2">Ajouter un plant</h2>
             <AddPlantForm onAdd={addPlant} />
           </div>
-
           <div className="bg-white rounded-2xl shadow p-4 mt-4">
             <h3 className="font-semibold mb-2">Catalogue</h3>
             <div className="max-h-64 overflow-auto divide-y">
@@ -269,102 +235,13 @@ function GardenHarvestTrackerApp() {
               ))}
             </div>
           </div>
-
-          <div className="bg-white rounded-2xl shadow p-4 mt-4">
-            <h3 className="font-semibold mb-3">Détails du plant</h3>
-            {!selectedPlant ? (
-              <p className="text-sm text-slate-500">Sélectionnez un plant dans le catalogue, puis cliquez sur une case du plan pour le placer. Clic droit pour vider une case.</p>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{selectedPlant.emoji}</span>
-                  <div>
-                    <div className="font-semibold">{selectedPlant.name} {selectedPlant.variety && <span className="text-slate-500">– {selectedPlant.variety}</span>}</div>
-                    <div className="text-xs text-slate-500">Planté le {selectedPlant.plantedAt}</div>
-                  </div>
-                  <div className="ml-auto flex gap-2">
-                    <button className="px-2 py-1 rounded border" onClick={()=>updatePlant(selectedPlant.id, { name: prompt("Nom", selectedPlant.name)||selectedPlant.name })}>Renommer</button>
-                    <button className="px-2 py-1 rounded border" onClick={()=>updatePlant(selectedPlant.id, { emoji: prompt("Emoji (🌱🍅🥬…)", selectedPlant.emoji)||selectedPlant.emoji })}>Emoji</button>
-                    <button className="px-2 py-1 rounded border text-red-600" onClick={()=>confirm("Supprimer ce plant ?") && deletePlant(selectedPlant.id)}>Supprimer</button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button className="px-3 py-2 rounded-lg border" onClick={()=>addWatering(selectedPlant.id, { date: new Date().toISOString().slice(0,10), amountL: 1, notes: "" })}>+ Arrosage (1L)</button>
-                  <button className="px-3 py-2 rounded-lg border" onClick={()=>addHarvest(selectedPlant.id, { date: new Date().toISOString().slice(0,10), qty: 1, weightKg: 0.2, notes: "" })}>+ Récolte (1 / 0,2kg)</button>
-                </div>
-
-                <div className="grid gap-3">
-                  <fieldset className="border rounded-xl p-3">
-                    <legend className="px-2 text-sm font-medium">Arrosages</legend>
-                    <AddWateringForm onAdd={(rec)=>addWatering(selectedPlant.id, rec)} />
-                    <LogList items={selectedPlant.waterings} render={(w)=> (
-                      <div className="flex items-center justify-between">
-                        <div>{w.date} – {w.amountL} L</div>
-                        {w.notes && <div className="text-xs text-slate-500">{w.notes}</div>}
-                      </div>
-                    )} />
-                  </fieldset>
-
-                  <fieldset className="border rounded-xl p-3">
-                    <legend className="px-2 text-sm font-medium">Récoltes</legend>
-                    <AddHarvestForm onAdd={(rec)=>addHarvest(selectedPlant.id, rec)} />
-                    <LogList items={selectedPlant.harvests} render={(h)=> (
-                      <div className="flex items-center justify-between">
-                        <div>{h.date} – {h.qty} pcs · {h.weightKg} kg</div>
-                        {h.notes && <div className="text-xs text-slate-500">{h.notes}</div>}
-                      </div>
-                    )} />
-                    <div className="mt-2 text-xs text-slate-500">
-                      Total {selectedPlant.harvests.reduce((s,h)=>s+(Number(h.weightKg)||0),0).toFixed(2)} kg / {selectedPlant.harvests.reduce((s,h)=>s+(Number(h.qty)||0),0)} pcs
-                    </div>
-                  </fieldset>
-
-                  <fieldset className="border rounded-xl p-3">
-                    <legend className="px-2 text-sm font-medium">Photos</legend>
-                    <AddPhotoForm onAdd={async (rec)=>{
-                      if (rec.file) {
-                        const dataUrl = await handleFileToDataUrl(rec.file);
-                        addPhoto(selectedPlant.id, { url: dataUrl, caption: rec.caption||"" });
-                      } else if (rec.url) {
-                        addPhoto(selectedPlant.id, { url: rec.url, caption: rec.caption||"" });
-                      }
-                    }} />
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      {selectedPlant.photos.map((ph)=> (
-                        <figure key={ph.id} className="border rounded-lg overflow-hidden bg-slate-50">
-                          <img src={ph.url} alt={ph.caption||"photo"} className="w-full h-24 object-cover" />
-                          <figcaption className="text-xs p-1 truncate" title={ph.caption}>{ph.caption||""}</figcaption>
-                        </figure>
-                      ))}
-                    </div>
-                  </fieldset>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Notes</label>
-                  <textarea className="w-full mt-1 px-2 py-1 border rounded" rows={3} value={selectedPlant.notes}
-                            onChange={(e)=>updatePlant(selectedPlant.id, { notes: e.target.value })} placeholder="Observations, maladies, taille, etc."/>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white rounded-2xl shadow p-4 mt-4">
-            <h3 className="font-semibold mb-2">Résumé des récoltes</h3>
-            <div className="text-sm">Poids total: <b>{totalHarvest.weight.toFixed(2)} kg</b> · Quantité totale: <b>{totalHarvest.qty}</b></div>
-          </div>
         </section>
       </main>
-
-      <footer className="max-w-7xl mx-auto p-4 text-xs text-slate-500">
-        Astuces: clic sur une case pour placer le plant sélectionné · clic droit pour vider · les données sont sauvées dans votre navigateur.
-      </footer>
     </div>
   );
 }
 
-// === Reusable UI ===
+// === Forms & Lists ===
 function AddPlantForm({ onAdd }) {
   const [form, setForm] = useState({ name:"", variety:"", emoji:"🌱", plantedAt: new Date().toISOString().slice(0,10), notes:"" });
   return (
@@ -379,4 +256,29 @@ function AddPlantForm({ onAdd }) {
         <input className="w-full mt-1 px-2 py-1 border rounded" value={form.emoji} onChange={(e)=>setForm({...form,emoji:e.target.value})} placeholder="🍅"/>
       </label>
       <label className="col-span-2">Date de plantation
-        <input type="date" className="w-full mt-1 px-2 py-1 border rounded" valu
+        <input type="date" className="w-full mt-1 px-2 py-1 border rounded" value={form.plantedAt} onChange={(e)=>setForm({...form,plantedAt:e.target.value})}/>
+      </label>
+      <label className="col-span-2">Notes
+        <textarea className="w-full mt-1 px-2 py-1 border rounded" rows={2} value={form.notes} onChange={(e)=>setForm({...form,notes:e.target.value})} placeholder="Ex: en plein soleil, paillage, tuteurage…"/>
+      </label>
+      <div className="col-span-2 flex justify-end">
+        <button className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white">Ajouter</button>
+      </div>
+    </form>
+  );
+}
+
+function LogList({ items, render }) {
+  if (!items?.length) return <p className="text-sm text-slate-500">Aucune donnée.</p>;
+  return (
+    <ul className="divide-y">
+      {items.map((it)=> (
+        <li key={it.id} className="py-1.5">{render(it)}</li>
+      ))}
+    </ul>
+  );
+}
+
+// === Mount ===
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<GardenHarvestTrackerApp />);
