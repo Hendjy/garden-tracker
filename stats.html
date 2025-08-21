@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Garden – Stats</title>
+  <link rel="icon" href="favicon.svg" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#10b981" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style> .nav a{padding:.5rem .75rem;border-radius:.75rem} .nav a.active{background:#0f172a;color:#fff} </style>
+</head>
+<body class="bg-slate-50">
+  <header class="max-w-7xl mx-auto p-3 flex items-center gap-3">
+    <span class="text-2xl">🪴</span>
+    <h1 class="text-xl font-bold">Garden – Statistiques</h1>
+    <nav class="nav ml-auto flex gap-2 text-sm">
+      <a href="index.html">Parcelles</a>
+      <a href="rotation.html">Rotation</a>
+      <a href="stats.html" class="active">Stats</a>
+    </nav>
+  </header>
+  <div id="root" class="max-w-7xl mx-auto p-4"></div>
+
+  <script src="core.js"></script>
+  <script type="text/babel" data-presets="env,react" src="page-stats.js"></script>
+</body>
+</html>
