@@ -11,7 +11,7 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
-  <style> .nav a{padding:.5rem .75rem;border-radius:.75rem} .nav a.active{background:#0f172a;color:#fff} </style>
+  <style>.nav a{padding:.5rem .75rem;border-radius:.75rem}.nav a.active{background:#0f172a;color:#fff}</style>
 </head>
 <body class="bg-slate-50">
   <header class="max-w-7xl mx-auto p-3 flex items-center gap-3">
@@ -20,6 +20,7 @@
     <nav class="nav ml-auto flex gap-2 text-sm">
       <a href="index.html" class="active">Parcelles</a>
       <a href="rotation.html">Rotation</a>
+      <a href="arrosage.html">Arrosage</a>
       <a href="stats.html">Stats</a>
     </nav>
   </header>
@@ -29,8 +30,7 @@
   <script type="text/babel" data-presets="env,react" src="page-index.js"></script>
 
   <script>
-    // (réactive si tu veux la PWA) 
-    // if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
   </script>
 </body>
 </html>
