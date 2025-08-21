@@ -23,8 +23,8 @@
 <body class="bg-slate-50">
   <div id="root"></div>
 
-  <!-- Notre app -->
-  <script type="text/babel" src="app.js"></script>
+  <!-- Notre app (important: demander à Babel les presets env + react) -->
+  <script type="text/babel" data-presets="env,react" src="app.js"></script>
 
   <!-- Enregistrement du service worker -->
   <script>
@@ -33,6 +33,17 @@
         console.log("✅ Service Worker enregistré");
       });
     }
+  </script>
+
+  <!-- Debug rapide : affiche les erreurs JS directement sur la page -->
+  <script>
+    window.addEventListener('error', e => {
+      const pre = document.createElement('pre');
+      pre.style.whiteSpace = 'pre-wrap';
+      pre.style.color = 'red';
+      pre.textContent = 'Erreur: ' + (e.error?.stack || e.message);
+      document.body.prepend(pre);
+    });
   </script>
 </body>
 </html>
