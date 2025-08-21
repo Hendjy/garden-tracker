@@ -1,43 +1,50 @@
 const C = window.GardenCore;
 
 function StatsPage(){
-  const [, setTick] = React.useState(0);
-  function refresh(){ setTick(t=>t+1); }
+  const plants = Object.values(C.db.plants);
 
   // Agrégations
-  const plants = Object.values(C.db.plants);
   const byVariety = aggregate(plants, p => `${p.name}${p.variety? " – "+p.variety:""}`,
                               p => sum(p.harvests.map(h => Number(h.weightKg)||0)));
   const byParcel = aggregateParcels();
+  const waterVsYield = plants.map(p=>{
+    const water = sum(p.waterings.map(w=>w.amountL));
+    const yieldKg = sum(p.harvests.map(h=>h.weightKg));
+    return { label: `${p.name}${p.variety? " – "+p.variety:""}`, x: water, y: yieldKg };
+  });
 
   React.useEffect(()=>{
-    // Graph 1 : Poids par variété
+    // Bar: variété
     const ctx1 = document.getElementById('chartVariety');
     if (ctx1) new Chart(ctx1, {
       type: 'bar',
-      data: {
-        labels: byVariety.map(x=>x.key),
-        datasets: [{ label:'kg', data: byVariety.map(x=>x.value) }]
-      },
-      options: { responsive:true, plugins:{legend:{display:false}} }
+      data: { labels: byVariety.map(x=>x.key), datasets: [{ label:'kg', data: byVariety.map(x=>x.value) }] },
+      options: { responsive:true, plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } }
     });
-
-    // Graph 2 : Poids par parcelle
+    // Bar: parcelle
     const ctx2 = document.getElementById('chartParcel');
     if (ctx2) new Chart(ctx2, {
       type: 'bar',
-      data: {
-        labels: byParcel.map(x=>x.key),
-        datasets: [{ label:'kg', data: byParcel.map(x=>x.value) }]
-      },
-      options: { responsive:true, plugins:{legend:{display:false}} }
+      data: { labels: byParcel.map(x=>x.key), datasets: [{ label:'kg', data: byParcel.map(x=>x.value) }] },
+      options: { responsive:true, plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } }
+    });
+    // Scatter: arrosage vs rendement
+    const ctx3 = document.getElementById('chartWaterYield');
+    if (ctx3) new Chart(ctx3, {
+      type: 'scatter',
+      data: { datasets: [{ label: 'Eau (L) vs Poids (kg)', data: waterVsYield.map(p=>({x:p.x, y:p.y})) }] },
+      options: {
+        responsive:true,
+        plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(ctx)=>`Eau ${ctx.raw.x} L · ${ctx.raw.y} kg`} } },
+        scales:{ x:{ title:{ display:true, text:'Eau totale (L)'} }, y:{ title:{ display:true, text:'Poids total (kg)'} } }
+      }
     });
   }, [C.db]);
 
   return (
-    <div className="grid md:grid-cols-2 gap-4">
+    <div className="grid lg:grid-cols-2 gap-4">
       <section className="bg-white rounded-2xl shadow p-4">
-        <h3 className="font-semibold mb-2">Poids récolté par variété</h3>
+        <h3 className="font-semibold mb-2">Poids par variété</h3>
         <canvas id="chartVariety" height="200"></canvas>
         <table className="mt-3 text-sm w-full">
           <thead><tr><th className="text-left p-2">Variété</th><th className="text-right p-2">kg</th></tr></thead>
@@ -68,12 +75,20 @@ function StatsPage(){
         </table>
       </section>
 
-      <section className="bg-white rounded-2xl shadow p-4 md:col-span-2">
+      <section className="bg-white rounded-2xl shadow p-4 lg:col-span-2">
+        <h3 className="font-semibold mb-2">Corrélation Arrosage ↔ Rendement</h3>
+        <canvas id="chartWaterYield" height="220"></canvas>
+        <p className="text-xs text-slate-500 mt-2">
+          Chaque point = un plant. X: eau totale (L), Y: poids total (kg). C’est indicatif (dépend aussi du climat, sol, variété).
+        </p>
+      </section>
+
+      <section className="bg-white rounded-2xl shadow p-4 lg:col-span-2">
         <h3 className="font-semibold mb-2">Export</h3>
         <button className="px-3 py-1.5 rounded bg-slate-900 text-white" onClick={()=>{
           const blob = new Blob([JSON.stringify(C.db, null, 2)], {type:'application/json'});
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href=url; a.download='garden-db.json'; a.click(); URL.revokeObjectURL(url);
+          const url = URL.createObjectURL(blob); const a = document.createElement('a');
+          a.href = url; a.download = 'garden-db.json'; a.click(); URL.revokeObjectURL(url);
         }}>Exporter JSON (tout)</button>
       </section>
     </div>
@@ -91,10 +106,9 @@ function aggregate(items, keyFn, valFn){
 }
 function sum(arr){ return arr.reduce((s,x)=>s+(Number(x)||0),0); }
 function aggregateParcels(){
-  // poids par parcelle = somme des poids des plants présents dans la parcelle (approx)
   const res = new Map();
   Object.values(C.db.parcels).forEach(par=>{
-    let tot=0;
+    let tot = 0;
     for (let r=0;r<par.rows;r++){
       for (let c=0;c<par.cols;c++){
         const pid = par.grid[r][c].plantId; if (!pid) continue;
