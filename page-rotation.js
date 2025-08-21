@@ -2,13 +2,13 @@ const C = window.GardenCore;
 
 function RotationView(){
   const [, setTick] = React.useState(0);
-  const par = C.getCurrentParcel();
   function refresh(){ setTick(t=>t+1); }
+  const par = C.getCurrentParcel();
+  const hist = C.rotationHistory(par.id, 6);
 
-  const hist = C.rotationHistory(par.id, 5);
-  const years = new Set();
-  Object.values(C.db.plants).forEach(p=>{ if(p.plantedAt) years.add(p.plantedAt.slice(0,4)); });
-  const yearList = Array.from(years).sort().reverse().slice(0,5);
+  const allYears = new Set();
+  Object.values(hist).forEach(cells => cells.forEach(x => allYears.add(x.year)));
+  const yearList = Array.from(allYears).sort().reverse().slice(0,6);
 
   return (
     <div className="space-y-4">
@@ -31,12 +31,11 @@ function RotationView(){
             </tr>
           </thead>
           <tbody>
-            {Array.from({length: par.rows}).map((_,r)=>(
+            {Array.from({length: par.rows}).map((_,r)=>
               Array.from({length: par.cols}).map((__,c)=>{
                 const key = `${r},${c}`;
                 const row = hist[key]||[];
                 const current = row[0];
-                // alerte simple: éviter même culture 2 années de suite
                 const warn = current ? row.filter(x=>x.plantName===current.plantName).length>1 : false;
                 return (
                   <tr key={key} className="border-t">
@@ -49,10 +48,10 @@ function RotationView(){
                   </tr>
                 );
               })
-            ))}
+            )}
           </tbody>
         </table>
-        <p className="text-xs text-slate-500 mt-2">Astuce : vise une rotation minimum de 3–4 ans pour une même famille (Solanacées, Brassicacées, Fabacées…).</p>
+        <p className="text-xs text-slate-500 mt-2">Astuce : vise une rotation de 3–4 ans pour une même famille.</p>
       </div>
     </div>
   );
