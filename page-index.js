@@ -1,4 +1,4 @@
-// page-index.js (React + Babel)
+// page-index.js (React + Babel) — avec Détails du plant, arrosages et RÉCOLTES (qty + poids)
 const C = window.GardenCore;
 const { useState } = React;
 
@@ -9,9 +9,12 @@ function ParcelGrid(){
   const par = C.getCurrentParcel();
   function refresh(){ setTick(t=>t+1); }
 
+  const selectedPlant = selectedPlantId ? C.db.plants[selectedPlantId] : null;
+
   return (
-    <div className="grid md:grid-cols-3 gap-4">
-      <section className="md:col-span-2 bg-white rounded-2xl shadow p-4">
+    <div className="grid lg:grid-cols-3 gap-4">
+      {/* Grille parcelle */}
+      <section className="lg:col-span-2 bg-white rounded-2xl shadow p-4">
         <div className="flex items-center gap-2 text-sm mb-3">
           <span className="font-semibold">Parcelle :</span>
           <select className="border rounded px-2 py-1"
@@ -71,6 +74,7 @@ function ParcelGrid(){
         </div>
       </section>
 
+      {/* Sidebar : catalogue + météo + détails plant */}
       <aside className="space-y-4">
         <div className="bg-white rounded-2xl shadow p-4">
           <h3 className="font-semibold mb-2">Catalogue plants</h3>
@@ -95,6 +99,68 @@ function ParcelGrid(){
         </div>
 
         <WeatherCard />
+
+        {/* Détails du plant : AJOUT RÉCOLTES */}
+        <div className="bg-white rounded-2xl shadow p-4">
+          <h3 className="font-semibold mb-2">Détails du plant</h3>
+          {!selectedPlant ? (
+            <p className="text-sm text-slate-500">Sélectionne un plant dans le catalogue pour ajouter arrosages et récoltes.</p>
+          ) : (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{selectedPlant.emoji||"🌱"}</span>
+                <div className="min-w-0">
+                  <div className="font-semibold truncate">{selectedPlant.name}{selectedPlant.variety?` – ${selectedPlant.variety}`:""}</div>
+                  <div className="text-xs text-slate-500">Planté le {selectedPlant.plantedAt}</div>
+                </div>
+              </div>
+
+              {/* Arrosage rapide */}
+              <div className="flex gap-2">
+                <button className="px-2 py-1 rounded border" onClick={()=>{
+                  C.addWatering(selectedPlant.id, { date: new Date().toISOString().slice(0,10), amountL: 1, notes: "" }); refresh();
+                }}>+ Arrosage (1L)</button>
+                <button className="px-2 py-1 rounded border" onClick={()=>{
+                  C.addHarvest(selectedPlant.id, { date: new Date().toISOString().slice(0,10), qty: 1, weightKg: 0.2, notes: "" }); refresh();
+                }}>+ Récolte (1 / 0,2kg)</button>
+              </div>
+
+              {/* Formulaires */}
+              <fieldset className="border rounded-xl p-3">
+                <legend className="px-2 text-sm font-medium">Arrosages</legend>
+                <AddWateringForm onAdd={(rec)=>{ C.addWatering(selectedPlant.id, rec); refresh(); }} />
+                <LogList items={selectedPlant.waterings} render={(w)=>(
+                  <div className="flex items-center justify-between">
+                    <div>{w.date} – {w.amountL} L</div>
+                    {w.notes && <div className="text-xs text-slate-500">{w.notes}</div>}
+                  </div>
+                )}/>
+              </fieldset>
+
+              <fieldset className="border rounded-xl p-3">
+                <legend className="px-2 text-sm font-medium">Récoltes</legend>
+                <AddHarvestForm onAdd={(rec)=>{ C.addHarvest(selectedPlant.id, rec); refresh(); }} />
+                <LogList items={selectedPlant.harvests} render={(h)=>(
+                  <div className="flex items-center justify-between">
+                    <div>{h.date} – {h.qty} pcs · {h.weightKg} kg</div>
+                    {h.notes && <div className="text-xs text-slate-500">{h.notes}</div>}
+                  </div>
+                )}/>
+                <div className="mt-2 text-xs text-slate-500">
+                  Total: {sum(selectedPlant.harvests.map(x=>x.weightKg)).toFixed(2)} kg · {sum(selectedPlant.harvests.map(x=>x.qty))} pcs
+                </div>
+              </fieldset>
+
+              <div>
+                <label className="text-sm font-medium">Notes</label>
+                <textarea className="w-full mt-1 px-2 py-1 border rounded" rows="2"
+                          value={selectedPlant.notes}
+                          onChange={(e)=>{ C.updatePlant(selectedPlant.id, { notes: e.target.value }); refresh(); }}
+                          placeholder="Observations, maladies, taille…"/>
+              </div>
+            </div>
+          )}
+        </div>
       </aside>
     </div>
   );
@@ -131,7 +197,7 @@ function AddPlantForm({ onAdd }){
                onChange={(e)=>setForm({...form, plantedAt:e.target.value})}/>
       </label>
       <label className="col-span-2">Notes
-        <textarea className="w-full mt-1 px-2 py-1 border rounded" rows={2}
+        <textarea className="w-full mt-1 px-2 py-1 border rounded" rows="2"
                   value={form.notes}
                   onChange={(e)=>setForm({...form, notes:e.target.value})}
                   placeholder="Ex: plein soleil, paillage…"/>
@@ -142,6 +208,64 @@ function AddPlantForm({ onAdd }){
     </form>
   );
 }
+
+function AddWateringForm({ onAdd }){
+  const [rec, setRec] = React.useState({ date: new Date().toISOString().slice(0,10), amountL: 1, notes:"" });
+  return (
+    <form className="grid grid-cols-3 gap-2 text-sm mb-2"
+          onSubmit={(e)=>{e.preventDefault(); onAdd({...rec, amountL: Number(rec.amountL)||0}); setRec(r=>({...r, notes:""}));}}>
+      <label>Date
+        <input type="date" className="w-full mt-1 px-2 py-1 border rounded"
+               value={rec.date} onChange={(e)=>setRec({...rec,date:e.target.value})}/>
+      </label>
+      <label>Litres
+        <input type="number" step="0.1" className="w-full mt-1 px-2 py-1 border rounded"
+               value={rec.amountL} onChange={(e)=>setRec({...rec,amountL:e.target.value})}/>
+      </label>
+      <label className="col-span-1">Notes
+        <input className="w-full mt-1 px-2 py-1 border rounded"
+               value={rec.notes} onChange={(e)=>setRec({...rec,notes:e.target.value})} placeholder="arrosoir, pluie…"/>
+      </label>
+      <div className="col-span-3 flex justify-end">
+        <button className="px-2 py-1 rounded border">Ajouter</button>
+      </div>
+    </form>
+  );
+}
+
+function AddHarvestForm({ onAdd }){
+  const [rec, setRec] = React.useState({ date: new Date().toISOString().slice(0,10), qty: 1, weightKg: 0.2, notes:"" });
+  return (
+    <form className="grid grid-cols-4 gap-2 text-sm mb-2"
+          onSubmit={(e)=>{e.preventDefault(); onAdd({ ...rec, qty:Number(rec.qty)||0, weightKg:Number(rec.weightKg)||0 }); setRec(r=>({...r, notes:""}));}}>
+      <label>Date
+        <input type="date" className="w-full mt-1 px-2 py-1 border rounded"
+               value={rec.date} onChange={(e)=>setRec({...rec,date:e.target.value})}/>
+      </label>
+      <label>Qté
+        <input type="number" className="w-full mt-1 px-2 py-1 border rounded"
+               value={rec.qty} onChange={(e)=>setRec({...rec,qty:e.target.value})}/>
+      </label>
+      <label>Poids (kg)
+        <input type="number" step="0.01" className="w-full mt-1 px-2 py-1 border rounded"
+               value={rec.weightKg} onChange={(e)=>setRec({...rec,weightKg:e.target.value})}/>
+      </label>
+      <label className="col-span-1">Notes
+        <input className="w-full mt-1 px-2 py-1 border rounded"
+               value={rec.notes} onChange={(e)=>setRec({...rec,notes:e.target.value})} placeholder="mûr, taille…"/>
+      </label>
+      <div className="col-span-4 flex justify-end">
+        <button className="px-2 py-1 rounded border">Ajouter</button>
+      </div>
+    </form>
+  );
+}
+
+function LogList({ items, render }){
+  if (!items?.length) return <p className="text-sm text-slate-500">Aucune donnée.</p>;
+  return <ul className="divide-y">{items.map(it=><li key={it.id} className="py-1.5">{render(it)}</li>)}</ul>;
+}
+function sum(arr){ return arr.reduce((s,x)=>s+(Number(x)||0),0); }
 
 function WeatherCard(){
   const [lat, setLat] = React.useState(C.db.weather.lat);
