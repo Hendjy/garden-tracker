@@ -7,10 +7,14 @@
   <link rel="icon" href="favicon.svg" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#10b981" />
+  <!-- Tailwind + React + Babel -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
+  <!-- Leaflet (pour le composant météo sur cette page) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>.nav a{padding:.5rem .75rem;border-radius:.75rem}.nav a.active{background:#0f172a;color:#fff}</style>
 </head>
 <body class="bg-slate-50">
@@ -21,6 +25,7 @@
       <a href="index.html" class="active">Parcelles</a>
       <a href="rotation.html">Rotation</a>
       <a href="arrosage.html">Arrosage</a>
+      <a href="weather.html">Météo</a>
       <a href="stats.html">Stats</a>
     </nav>
   </header>
@@ -29,8 +34,6 @@
   <script src="core.js"></script>
   <script type="text/babel" data-presets="env,react" src="page-index.js"></script>
 
-  <script>
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
-  </script>
+  <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>
