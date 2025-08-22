@@ -1,9 +1,9 @@
-// core.js — noyau de données (sans JSX) — VERSION 3
+// core.js — noyau de données (sans JSX) — VERSION 3 + iconUrl
 // Schéma v3:
 // {
 //   version: 3,
 //   weather: { lat, lon },
-//   plants: { [id]: {id,name,variety,emoji,plantedAt,notes,photos,waterings,harvests} },
+//   plants: { [id]: {id,name,variety,emoji,iconUrl,plantedAt,notes,photos,waterings,harvests} },
 //   parcels: {
 //     [parcelId]: {
 //       id, name, rows, cols,
@@ -30,7 +30,6 @@
   function migrateToV3(db) {
     if (!db) return fresh();
     if (db.version === 3) return db;
-    // v2 -> v3
     if (db.version === 2) {
       Object.values(db.parcels).forEach(par=>{
         par.grid = par.grid.map(row => row.map(cell => {
@@ -43,9 +42,7 @@
       db.version = 3;
       return db;
     }
-    // v1 -> v2 -> v3
     if (!db.version) {
-      // v1 layout
       const pid = uid();
       const rows = db.rows || 8, cols = db.cols || 12;
       const gridV2 = (db.grid && db.grid.length)
@@ -92,6 +89,8 @@
   function save(state){ localStorage.setItem(LS_V3, JSON.stringify(state)); }
 
   const db = migrateToV3(load());
+  // Assurer iconUrl sur anciens plants
+  Object.values(db.plants).forEach(p=>{ if(p.iconUrl===undefined) p.iconUrl=""; });
   save(db);
 
   // ——— Parcelles ———
@@ -108,7 +107,7 @@
   }
   function removeParcel(id){
     if (!db.parcels[id]) return;
-    if (Object.keys(db.parcels).length === 1) return; // garder au moins une
+    if (Object.keys(db.parcels).length === 1) return;
     delete db.parcels[id];
     if (!db.parcels[db.currentParcelId]) db.currentParcelId = Object.keys(db.parcels)[0];
     save(db);
@@ -128,7 +127,7 @@
     const p = getCurrentParcel(); if (!p) return;
     const cell = p.grid[r][c];
     cell.plantId = plantId;
-    cell.history.unshift({ ts: today(), plantId }); // historique (dernier en tête)
+    cell.history.unshift({ ts: today(), plantId }); // historique
     save(db);
   }
   function clearCell(r,c){
@@ -150,11 +149,12 @@
       name: plant.name?.trim() || "Plant",
       variety: plant.variety?.trim() || "",
       emoji: plant.emoji?.trim() || "🌱",
+      iconUrl: plant.iconUrl || "",   // <— icône personnalisée (URL ou data:image)
       plantedAt: plant.plantedAt || today(),
       notes: plant.notes || "",
       photos: [],
-      waterings: [], // {id,date,amountL,notes}
-      harvests: []   // {id,date,qty,weightKg,notes}
+      waterings: [],  // {id,date,amountL,notes}
+      harvests: []    // {id,date,qty,weightKg,notes}
     };
     save(db); return id;
   }
@@ -185,7 +185,6 @@
   }
 
   // ——— Rotation ———
-  // Retourne { "r,c": [{year, plantName}] } à partir de l'historique
   function rotationHistory(parcelId, yearsBack=5){
     const par = db.parcels[parcelId]; if (!par) return {};
     const out = {};
@@ -219,13 +218,10 @@
   }
 
   // ——— Arrosage ———
-  // Renvoie des suggestions par plant selon la pluie récente et le dernier arrosage
   function wateringSuggestions(dailyRain, rainThresholdMm=5, daysWindow=3, maxAgeDays=2){
-    // dailyRain: [{date:'YYYY-MM-DD', rain_mm}]
     const rainMap = new Map(dailyRain.map(d=>[d.date, Number(d.rain_mm)||0]));
     const lastNDates = [...rainMap.keys()].sort().slice(-daysWindow);
     const rainSum = lastNDates.reduce((s,d)=>s+(rainMap.get(d)||0),0);
-
     const out = [];
     Object.values(db.plants).forEach(p=>{
       const lastWater = p.waterings[0]?.date || null;
@@ -236,6 +232,7 @@
     return out.sort((a,b)=> (b.need?1:0)-(a.need?1:0) || (b.daysSince||0)-(a.daysSince||0));
   }
 
+  // ——— Export global ———
   window.GardenCore = {
     db, save, uid,
     getCurrentParcel, setCurrentParcel, addParcel, removeParcel, resizeParcel,
