@@ -1,243 +1,227 @@
-// core.js — noyau de données (sans JSX) — VERSION 3 + iconUrl
-// Schéma v3:
-// {
-//   version: 3,
-//   weather: { lat, lon },
-//   plants: { [id]: {id,name,variety,emoji,iconUrl,plantedAt,notes,photos,waterings,harvests} },
-//   parcels: {
-//     [parcelId]: {
-//       id, name, rows, cols,
-//       grid[r][c] = { plantId: string|null, layers: { path?:bool, mulch?:bool }, history: [{ts, plantId}] }
-//     }
-//   },
-//   currentParcelId: string
-// }
-
+// core.js — Noyau v4 : profils (multi-comptes) + localisation par parcelle + photos
 (function(){
-  const LS_V1 = "garden-tracker-state-v1";
-  const LS_V2 = "garden-tracker-state-v2";
-  const LS_V3 = "garden-tracker-state-v3";
+  // ---------- PROFILS (multi-comptes) ----------
+  const PROFILE_INDEX_KEY = "garden-profiles-index-v1"; // {currentId, list:[{id,name}]}
+  const DB_KEY_FOR = (id)=>`garden-db-v4-${id}`;
 
   function uid(){ return Math.random().toString(36).slice(2,10); }
   function today(){ return new Date().toISOString().slice(0,10); }
 
-  function makeCell(plantId=null){
-    const h = [];
-    if (plantId !== null) h.push({ ts: today(), plantId });
-    return { plantId, layers: {}, history: h };
+  function loadProfiles(){
+    const raw = localStorage.getItem(PROFILE_INDEX_KEY);
+    if(raw){ try { return JSON.parse(raw); } catch{} }
+    // créer un index par défaut
+    const id = uid();
+    const index = { currentId: id, list: [{ id, name: "Mon jardin" }] };
+    localStorage.setItem(PROFILE_INDEX_KEY, JSON.stringify(index));
+    // créer la DB du profil
+    localStorage.setItem(DB_KEY_FOR(id), JSON.stringify(freshDB("Mon jardin")));
+    return index;
+  }
+  function saveProfiles(index){ localStorage.setItem(PROFILE_INDEX_KEY, JSON.stringify(index)); }
+
+  function listProfiles(){ return loadProfiles().list; }
+  function getCurrentProfileId(){ return loadProfiles().currentId; }
+  function setCurrentProfile(id){
+    const idx = loadProfiles();
+    if(!idx.list.find(p=>p.id===id)) return;
+    idx.currentId = id; saveProfiles(idx);
+    // recharger la db active
+    active.db = migrate(loadActiveDB());
+  }
+  function addProfile(name="Nouveau jardin"){
+    const idx = loadProfiles();
+    const id = uid();
+    idx.list.push({ id, name }); idx.currentId = id; saveProfiles(idx);
+    localStorage.setItem(DB_KEY_FOR(id), JSON.stringify(freshDB(name)));
+    active.db = migrate(loadActiveDB());
+    return id;
+  }
+  function renameProfile(id, name){
+    const idx = loadProfiles(); const p = idx.list.find(x=>x.id===id); if(!p) return; p.name = name; saveProfiles(idx);
+  }
+  function removeProfile(id){
+    const idx = loadProfiles();
+    if(idx.list.length<=1) return; // garder au moins 1
+    idx.list = idx.list.filter(p=>p.id!==id);
+    if(idx.currentId===id) idx.currentId = idx.list[0].id;
+    saveProfiles(idx);
+    localStorage.removeItem(DB_KEY_FOR(id));
+    active.db = migrate(loadActiveDB());
+  }
+  function loadActiveDB(){
+    const id = getCurrentProfileId();
+    const raw = localStorage.getItem(DB_KEY_FOR(id));
+    if(raw){ try { return JSON.parse(raw); } catch{} }
+    const db = freshDB("Jardin");
+    localStorage.setItem(DB_KEY_FOR(id), JSON.stringify(db));
+    return db;
+  }
+  function saveActiveDB(db){
+    const id = getCurrentProfileId();
+    localStorage.setItem(DB_KEY_FOR(id), JSON.stringify(db));
   }
 
-  function migrateToV3(db) {
-    if (!db) return fresh();
-    if (db.version === 3) return db;
-    if (db.version === 2) {
-      Object.values(db.parcels).forEach(par=>{
-        par.grid = par.grid.map(row => row.map(cell => {
-          const pid = (cell && "plantId" in cell) ? cell.plantId : null;
-          const layers = (cell && cell.layers) ? cell.layers : {};
-          const history = (pid!==null) ? [{ ts: (db.plants[pid]?.plantedAt || today()), plantId: pid }] : [];
-          return { plantId: pid, layers, history };
-        }));
-      });
-      db.version = 3;
-      return db;
-    }
-    if (!db.version) {
-      const pid = uid();
-      const rows = db.rows || 8, cols = db.cols || 12;
-      const gridV2 = (db.grid && db.grid.length)
-        ? db.grid.map(row => row.map(cell => ({ plantId: cell?.plantId ?? null, layers: {} })))
-        : Array.from({length: rows}, () => Array.from({length: cols}, () => ({ plantId:null, layers:{} })));
-      const db2 = {
-        version: 2,
-        weather: { lat: 48.8566, lon: 2.3522, ...(db.weather||{}) },
-        plants: db.plants || {},
-        parcels: { [pid]: { id: pid, name: "Parcelle A", rows, cols, grid: gridV2 } },
-        currentParcelId: pid
-      };
-      return migrateToV3(db2);
-    }
-    return fresh();
-  }
-
-  function fresh(){
-    const pid = uid();
+  // ---------- DB ----------
+  // v4: ajoute {lat,lon} sur chaque parcelle + historique (déjà v3) + iconUrl
+  function freshDB(profileName){
+    const parcelId = uid();
     return {
-      version: 3,
-      weather: { lat: 48.8566, lon: 2.3522 },
+      version: 4,
+      profileName,
       plants: {},
       parcels: {
-        [pid]: {
-          id: pid, name: "Parcelle A", rows: 8, cols: 12,
-          grid: Array.from({length:8}, () => Array.from({length:12}, () => makeCell()))
+        [parcelId]: {
+          id: parcelId, name: "Parcelle A", rows: 8, cols: 12,
+          lat: null, lon: null, // << localisation par parcelle
+          grid: Array.from({length:8}, ()=>Array.from({length:12}, ()=>makeCell()))
         }
       },
-      currentParcelId: pid
+      currentParcelId: parcelId
     };
   }
-
-  function load() {
-    const raw3 = localStorage.getItem(LS_V3);
-    if (raw3) { try { return JSON.parse(raw3); } catch{} }
-    const raw2 = localStorage.getItem(LS_V2);
-    if (raw2) { try { return migrateToV3(JSON.parse(raw2)); } catch{} }
-    const raw1 = localStorage.getItem(LS_V1);
-    if (raw1) { try { return migrateToV3(JSON.parse(raw1)); } catch{} }
-    return fresh();
+  function makeCell(plantId=null){
+    const h=[]; if(plantId!==null) h.push({ts:today(), plantId});
+    return { plantId, layers:{}, history:h };
   }
 
-  function save(state){ localStorage.setItem(LS_V3, JSON.stringify(state)); }
+  function migrate(db){
+    if(!db || !db.version) return freshDB("Jardin");
+    if(db.version===4){
+      // assurer lat/lon
+      Object.values(db.parcels).forEach(p=>{
+        if(typeof p.lat==="undefined") p.lat = null;
+        if(typeof p.lon==="undefined") p.lon = null;
+      });
+      Object.values(db.plants).forEach(pl=>{ if(pl.iconUrl===undefined) pl.iconUrl=""; });
+      return db;
+    }
+    // v3 -> v4
+    if(db.version===3){
+      Object.values(db.parcels).forEach(p=>{ if(typeof p.lat==="undefined") p.lat=null; if(typeof p.lon==="undefined") p.lon=null; });
+      db.version = 4; return db;
+    }
+    return db;
+  }
 
-  const db = migrateToV3(load());
-  // Assurer iconUrl sur anciens plants
-  Object.values(db.plants).forEach(p=>{ if(p.iconUrl===undefined) p.iconUrl=""; });
-  save(db);
+  const active = { db: migrate(loadActiveDB()) };
 
-  // ——— Parcelles ———
-  function getCurrentParcel(){ return db.parcels[db.currentParcelId]; }
-  function setCurrentParcel(id){ if (db.parcels[id]) { db.currentParcelId = id; save(db); } }
+  // ---------- Parcelles ----------
+  function getCurrentParcel(){ return active.db.parcels[active.db.currentParcelId]; }
+  function setCurrentParcel(id){ if(active.db.parcels[id]) { active.db.currentParcelId=id; saveActiveDB(active.db); } }
   function addParcel({name, rows, cols}){
     const id = uid();
-    db.parcels[id] = {
-      id, name: name || `Parcelle ${Object.keys(db.parcels).length+1}`,
-      rows: rows||8, cols: cols||12,
-      grid: Array.from({length: rows||8}, () => Array.from({length: cols||12}, () => makeCell()))
+    active.db.parcels[id] = {
+      id, name: name||`Parcelle ${Object.keys(active.db.parcels).length+1}`,
+      rows: rows||8, cols: cols||12, lat:null, lon:null,
+      grid: Array.from({length:rows||8}, ()=>Array.from({length:cols||12}, ()=>makeCell()))
     };
-    db.currentParcelId = id; save(db); return id;
+    active.db.currentParcelId = id; saveActiveDB(active.db); return id;
   }
   function removeParcel(id){
-    if (!db.parcels[id]) return;
-    if (Object.keys(db.parcels).length === 1) return;
-    delete db.parcels[id];
-    if (!db.parcels[db.currentParcelId]) db.currentParcelId = Object.keys(db.parcels)[0];
-    save(db);
+    if(!active.db.parcels[id]) return;
+    if(Object.keys(active.db.parcels).length<=1) return;
+    delete active.db.parcels[id];
+    if(!active.db.parcels[active.db.currentParcelId]) active.db.currentParcelId = Object.keys(active.db.parcels)[0];
+    saveActiveDB(active.db);
   }
   function resizeParcel(id, rows, cols){
-    const p = db.parcels[id]; if (!p) return;
+    const p = active.db.parcels[id]; if(!p) return;
     let g = p.grid.slice(0, rows);
-    while (g.length < rows) g.push(Array.from({length: cols}, () => makeCell()));
-    g = g.map(row => {
-      const r = row.slice(0, cols);
-      while (r.length < cols) r.push(makeCell());
+    while(g.length<rows) g.push(Array.from({length:cols}, ()=>makeCell()));
+    g = g.map(row=>{
+      const r=row.slice(0,cols);
+      while(r.length<cols) r.push(makeCell());
       return r;
     });
-    p.rows = rows; p.cols = cols; p.grid = g; save(db);
+    p.rows=rows; p.cols=cols; p.grid=g; saveActiveDB(active.db);
+  }
+  function setParcelLocation(id, lat, lon){
+    const p = active.db.parcels[id]; if(!p) return; p.lat = lat; p.lon = lon; saveActiveDB(active.db);
   }
   function placePlant(r,c,plantId){
-    const p = getCurrentParcel(); if (!p) return;
-    const cell = p.grid[r][c];
-    cell.plantId = plantId;
-    cell.history.unshift({ ts: today(), plantId }); // historique
-    save(db);
+    const p=getCurrentParcel(); const cell=p.grid[r][c]; cell.plantId=plantId; cell.history.unshift({ts:today(), plantId}); saveActiveDB(active.db);
   }
   function clearCell(r,c){
-    const p = getCurrentParcel(); const cell = p.grid[r][c];
-    cell.plantId = null;
-    cell.history.unshift({ ts: today(), plantId: null });
-    save(db);
+    const p=getCurrentParcel(); const cell=p.grid[r][c]; cell.plantId=null; cell.history.unshift({ts:today(), plantId:null}); saveActiveDB(active.db);
   }
   function toggleLayer(r,c,key){
-    const p = getCurrentParcel(); const cell = p.grid[r][c];
-    cell.layers[key] = !cell.layers[key]; save(db);
+    const p=getCurrentParcel(); const cell=p.grid[r][c]; cell.layers[key]=!cell.layers[key]; saveActiveDB(active.db);
   }
 
-  // ——— Plants ———
+  // ---------- Plants ----------
   function addPlant(plant){
-    const id = uid();
-    db.plants[id] = {
+    const id=uid();
+    active.db.plants[id]={
       id,
-      name: plant.name?.trim() || "Plant",
-      variety: plant.variety?.trim() || "",
-      emoji: plant.emoji?.trim() || "🌱",
-      iconUrl: plant.iconUrl || "",   // <— icône personnalisée (URL ou data:image)
+      name: plant.name?.trim()||"Plant",
+      variety: plant.variety?.trim()||"",
+      emoji: plant.emoji?.trim()||"🌱",
+      iconUrl: plant.iconUrl||"",
       plantedAt: plant.plantedAt || today(),
-      notes: plant.notes || "",
-      photos: [],
+      notes: plant.notes||"",
+      photos: [],     // {id,url,caption,ts}
       waterings: [],  // {id,date,amountL,notes}
       harvests: []    // {id,date,qty,weightKg,notes}
     };
-    save(db); return id;
+    saveActiveDB(active.db); return id;
   }
-  function updatePlant(id, patch){ if (!db.plants[id]) return; db.plants[id] = { ...db.plants[id], ...patch }; save(db); }
+  function updatePlant(id, patch){ if(!active.db.plants[id]) return; active.db.plants[id] = { ...active.db.plants[id], ...patch }; saveActiveDB(active.db); }
   function deletePlant(id){
-    if (!db.plants[id]) return;
-    Object.values(db.parcels).forEach(par=>{
-      par.grid = par.grid.map(row => row.map(cell => {
-        if (cell.plantId === id) cell.plantId = null;
-        return cell;
-      }));
+    if(!active.db.plants[id]) return;
+    Object.values(active.db.parcels).forEach(par=>{
+      par.grid = par.grid.map(row=>row.map(cell=>{ if(cell.plantId===id) cell.plantId=null; return cell; }));
     });
-    delete db.plants[id]; save(db);
+    delete active.db.plants[id]; saveActiveDB(active.db);
   }
-  function addWatering(plantId, rec){
-    const p = db.plants[plantId]; if (!p) return;
-    p.waterings.unshift({ id: uid(), date: rec.date, amountL: Number(rec.amountL)||0, notes: rec.notes||"" });
-    save(db);
-  }
-  function addHarvest(plantId, rec){
-    const p = db.plants[plantId]; if (!p) return;
-    p.harvests.unshift({ id: uid(), date: rec.date, qty: Number(rec.qty)||0, weightKg: Number(rec.weightKg)||0, notes: rec.notes||"" });
-    save(db);
-  }
-  function addPhoto(plantId, rec){
-    const p = db.plants[plantId]; if (!p) return;
-    p.photos.unshift({ id: uid(), url: rec.url, caption: rec.caption||"" }); save(db);
-  }
+  function addWatering(id, rec){ const p=active.db.plants[id]; if(!p) return; p.waterings.unshift({ id:uid(), date:rec.date, amountL:Number(rec.amountL)||0, notes:rec.notes||"" }); saveActiveDB(active.db); }
+  function addHarvest(id, rec){ const p=active.db.plants[id]; if(!p) return; p.harvests.unshift({ id:uid(), date:rec.date, qty:Number(rec.qty)||0, weightKg:Number(rec.weightKg)||0, notes:rec.notes||"" }); saveActiveDB(active.db); }
+  function addPhoto(id, rec){ const p=active.db.plants[id]; if(!p) return; p.photos.unshift({ id:uid(), url:rec.url, caption:rec.caption||"", ts: Date.now() }); saveActiveDB(active.db); }
+  function removePhoto(id, photoId){ const p=active.db.plants[id]; if(!p) return; p.photos = p.photos.filter(ph=>ph.id!==photoId); saveActiveDB(active.db); }
 
-  // ——— Rotation ———
+  // ---------- Rotation ----------
   function rotationHistory(parcelId, yearsBack=5){
-    const par = db.parcels[parcelId]; if (!par) return {};
-    const out = {};
-    for (let r=0; r<par.rows; r++){
-      for (let c=0; c<par.cols; c++){
-        const key = `${r},${c}`;
-        const hist = par.grid[r][c].history || [];
-        const arr = [];
-        hist.forEach(h=>{
-          if (!h || h.plantId===null) return;
-          const p = db.plants[h.plantId]; if (!p) return;
-          const y = (h.ts||p.plantedAt||"").slice(0,4);
-          if (!arr.find(x=>x.year===y)) arr.push({ year: y, plantName: p.name });
+    const par = active.db.parcels[parcelId]; if(!par) return {};
+    const out={};
+    for(let r=0;r<par.rows;r++){
+      for(let c=0;c<par.cols;c++){
+        const key=`${r},${c}`; const hist=par.grid[r][c].history||[]; const arr=[];
+        hist.forEach(h=>{ if(!h||h.plantId===null) return; const pl=active.db.plants[h.plantId]; if(!pl) return;
+          const y=(h.ts||pl.plantedAt||"").slice(0,4); if(!arr.find(x=>x.year===y)) arr.push({year:y, plantName:pl.name});
         });
-        out[key] = arr.slice(0, yearsBack);
+        out[key]=arr.slice(0,yearsBack);
       }
     }
     return out;
   }
 
-  // ——— Météo ———
-  async function fetchRain(lat, lon, days=14){
-    const end = new Date();
-    const start = new Date(Date.now() - (days-1)*24*3600*1000);
-    const fmt = d => d.toISOString().slice(0,10);
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${fmt(start)}&end_date=${fmt(end)}&daily=precipitation_sum&timezone=auto`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("HTTP "+res.status);
-    const json = await res.json();
-    return (json?.daily?.time||[]).map((t,i)=>({ date: t, rain_mm: json.daily.precipitation_sum[i] }));
+  // ---------- Météo ----------
+  async function fetchRain(lat, lon, pastDays=14, nextDays=7){
+    const iso=d=>d.toISOString().slice(0,10);
+    const start=new Date(Date.now()-(pastDays-1)*86400000);
+    const end  =new Date(Date.now()+ nextDays   *86400000);
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${iso(start)}&end_date=${iso(end)}&daily=precipitation_sum&timezone=auto`;
+    const r=await fetch(url); if(!r.ok) throw new Error("HTTP "+r.status); const j=await r.json();
+    const all=(j?.daily?.time||[]).map((t,i)=>({date:t,rain_mm:Number(j.daily.precipitation_sum[i]||0)}));
+    const today=iso(new Date());
+    return { past: all.filter(d=>d.date<=today), forecast: all.filter(d=>d.date>today) };
   }
 
-  // ——— Arrosage ———
-  function wateringSuggestions(dailyRain, rainThresholdMm=5, daysWindow=3, maxAgeDays=2){
-    const rainMap = new Map(dailyRain.map(d=>[d.date, Number(d.rain_mm)||0]));
-    const lastNDates = [...rainMap.keys()].sort().slice(-daysWindow);
-    const rainSum = lastNDates.reduce((s,d)=>s+(rainMap.get(d)||0),0);
-    const out = [];
-    Object.values(db.plants).forEach(p=>{
-      const lastWater = p.waterings[0]?.date || null;
-      const daysSince = lastWater ? Math.floor((Date.now() - new Date(lastWater).getTime()) / 86400000) : Infinity;
-      const need = (rainSum < rainThresholdMm) && (daysSince > maxAgeDays);
-      out.push({ plantId: p.id, name: p.name, variety: p.variety, lastWater, daysSince, rainSum, need });
-    });
-    return out.sort((a,b)=> (b.need?1:0)-(a.need?1:0) || (b.daysSince||0)-(a.daysSince||0));
-  }
-
-  // ——— Export global ———
+  // ---------- Export API ----------
   window.GardenCore = {
-    db, save, uid,
-    getCurrentParcel, setCurrentParcel, addParcel, removeParcel, resizeParcel,
+    // profil
+    profile: {
+      listProfiles, addProfile, removeProfile, renameProfile,
+      getCurrentProfileId, setCurrentProfile, get index(){ return loadProfiles(); }
+    },
+    // db active
+    db: active.db, save: saveActiveDB, uid,
+    // parcelles
+    getCurrentParcel, setCurrentParcel, addParcel, removeParcel, resizeParcel, setParcelLocation,
     placePlant, clearCell, toggleLayer,
-    addPlant, updatePlant, deletePlant, addWatering, addHarvest, addPhoto,
-    rotationHistory, fetchRain, wateringSuggestions
+    // plants
+    addPlant, updatePlant, deletePlant, addWatering, addHarvest, addPhoto, removePhoto,
+    // rotation & météo
+    rotationHistory, fetchRain
   };
 })();
