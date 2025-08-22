@@ -7,18 +7,13 @@
   <link rel="icon" href="favicon.svg" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#10b981" />
-
-  <!-- Tailwind + React + Babel -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
-
-  <!-- Leaflet + Chart.js -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>.nav a{padding:.5rem .75rem;border-radius:.75rem}.nav a.active{background:#0f172a;color:#fff}</style>
 </head>
 <body class="bg-slate-50">
@@ -32,12 +27,11 @@
       <a href="weather.html" class="active">Météo</a>
       <a href="stats.html">Stats</a>
     </nav>
+    <div id="profile-switcher" class="ml-3"></div>
   </header>
   <div id="root" class="max-w-7xl mx-auto p-4"></div>
-
   <script src="core.js"></script>
   <script type="text/babel" data-presets="env,react" src="page-weather.js"></script>
-
   <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 </body>
 </html>
