@@ -1,8 +1,8 @@
-// page-index.js — Parcelles + WeatherCard
+// page-index.js — Parcelles + WeatherCard (Leaflet + Chart.js)
 const C = window.GardenCore;
 const { useState } = React;
 
-/* ---------- Grille Parcelles (inchangé côté logique) ---------- */
+/* ---------- Grille Parcelles ---------- */
 function ParcelGrid(){
   const [, setTick] = useState(0);
   const [mode, setMode] = useState("plant");
@@ -96,7 +96,7 @@ function ParcelGrid(){
   );
 }
 
-/* ---------- Formulaire ajout plant (avec URL/fichier icône) ---------- */
+/* ---------- Formulaire ajout plant ---------- */
 function AddPlantForm({ onAdd }){
   const [form, setForm] = React.useState({ name:"", variety:"", emoji:"🌱", plantedAt: new Date().toISOString().slice(0,10), notes:"" });
   const [iconUrlInput, setIconUrlInput] = React.useState("");
@@ -134,7 +134,7 @@ function AddPlantForm({ onAdd }){
   );
 }
 
-/* ---------- WeatherCard (adresse + pin + passé & prévisions) ---------- */
+/* ---------- WeatherCard (barchart + carte) ---------- */
 function WeatherCard(){
   const [lat, setLat] = React.useState(C.db.weather.lat ?? 48.8566);
   const [lon, setLon] = React.useState(C.db.weather.lon ?? 2.3522);
@@ -146,6 +146,7 @@ function WeatherCard(){
   const [past, setPast] = React.useState([]);       // {date,rain_mm}
   const [forecast, setForecast] = React.useState([]); // {date,rain_mm}
   const mapRef = React.useRef(null); const markerRef = React.useRef(null);
+  const chartCanvasRef = React.useRef(null); const chartInstanceRef = React.useRef(null);
 
   const iso = (d)=>d.toISOString().slice(0,10);
   async function geocodeAddress(address){
@@ -164,6 +165,7 @@ function WeatherCard(){
   }
   function save(lat,lon){ C.db.weather.lat=lat; C.db.weather.lon=lon; C.save(C.db); }
 
+  // Leaflet
   React.useEffect(()=>{ if(!window.L||mapRef.current) return;
     const map=L.map('weather-map', {zoomControl:true}).setView([lat,lon],11); mapRef.current=map;
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
@@ -172,8 +174,48 @@ function WeatherCard(){
   },[]);
   React.useEffect(()=>{ if(mapRef.current&&markerRef.current){ markerRef.current.setLatLng([lat,lon]); mapRef.current.setView([lat,lon], mapRef.current.getZoom()); }},[lat,lon]);
 
-  async function reload(la=lat,lo=lon,p=pastDays,n=nextDays){ setLoading(true); setError(null);
-    try{ const d=await fetchPluv(la,lo,p,n); setPast(d.past); setForecast(d.forecast); }catch(e){ setError(e.message||String(e)); } setLoading(false); }
+  // Chart
+  function buildChart(pastArr, foreArr){
+    const ctx = chartCanvasRef.current.getContext('2d');
+    if (chartInstanceRef.current){ chartInstanceRef.current.destroy(); chartInstanceRef.current=null; }
+    const labels = [...pastArr.map(d=>d.date), ...foreArr.map(d=>d.date)];
+    const pastData = [...pastArr.map(d=>d.rain_mm), ...foreArr.map(_=>0)];
+    const forecastData = [...pastArr.map(_=>0), ...foreArr.map(d=>d.rain_mm)];
+    const splitIndex = pastArr.length-1;
+
+    chartInstanceRef.current = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Passé (mm)', data: pastData, backgroundColor: 'rgba(16, 185, 129, 0.75)' },
+          { label: 'Prévision (mm)', data: forecastData, backgroundColor: 'rgba(59, 130, 246, 0.75)' }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } },
+        scales: { x: { ticks: { maxRotation: 0, autoSkip: true } }, y: { beginAtZero: true, title: { display: true, text: 'mm' } } },
+        pluginsCustomLine: { index: splitIndex }
+      },
+      plugins: [{
+        id: 'pluginsCustomLine',
+        afterDraw(chart, _args, opts){
+          const i = opts.index; if (i<0) return;
+          const x = chart.scales.x.getPixelForValue(i);
+          const ctx = chart.ctx; ctx.save(); ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.setLineDash([4,4]);
+          ctx.beginPath(); ctx.moveTo(x, chart.chartArea.top); ctx.lineTo(x, chart.chartArea.bottom); ctx.stroke(); ctx.restore();
+        }
+      }]
+    });
+  }
+
+  async function reload(la=lat,lo=lon,p=pastDays,n=nextDays){
+    setLoading(true); setError(null);
+    try{ const {past,forecast}=await fetchPluv(la,lo,p,n); setPast(past); setForecast(forecast); buildChart(past.slice(-p), forecast.slice(0,n)); }
+    catch(e){ setError(e.message||String(e)); }
+    setLoading(false);
+  }
   React.useEffect(()=>{ reload(); },[]);
 
   async function search(){ if(!addr.trim()) return; setLoading(true); setError(null);
@@ -189,7 +231,8 @@ function WeatherCard(){
   return (
     <div className="bg-white rounded-2xl shadow p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <input className="border rounded px-2 py-1 flex-1 min-w-[180px]" placeholder="Adresse (ex: Melun, France)" value={addr} onChange={e=>setAddr(e.target.value)}/>
+        <input className="border rounded px-2 py-1 flex-1 min-w-[180px]" placeholder="Adresse (ex: Melun, France)"
+               value={addr} onChange={e=>setAddr(e.target.value)}/>
         <button className="px-3 py-1.5 rounded border" onClick={search} disabled={loading}>Rechercher</button>
         <button className="px-3 py-1.5 rounded border" onClick={useGps} disabled={loading}>📍 Ma position</button>
         <div className="ml-auto flex items-center gap-2 text-sm">
@@ -202,37 +245,15 @@ function WeatherCard(){
       <div id="weather-map" className="rounded-xl overflow-hidden border mt-3" style={{height: 300}}></div>
       {error && <p className="text-sm text-red-600 mt-2">Erreur: {error}</p>}
 
-      {(past.length>0 || forecast.length>0) && (
-        <div className="mt-3 grid md:grid-cols-2 gap-4">
-          <div>
-            <h4 className="font-semibold mb-1">Pluviométrie passée (Σ {sum(past).toFixed(1)} mm)</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {past.slice(-pastDays).map(d=>(
-                <div key={d.date} className="p-2 border rounded text-center">
-                  <div className="text-xs text-slate-500">{d.date}</div>
-                  <div className="text-lg font-semibold">{d.rain_mm.toFixed(1)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-1">Prévisions (Σ {sum(forecast).toFixed(1)} mm)</h4>
-            {forecast.length===0 ? <p className="text-sm text-slate-500">Pas de prévisions demandées.</p> :
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {forecast.slice(0,nextDays).map(d=>(
-                  <div key={d.date} className="p-2 border rounded text-center">
-                    <div className="text-xs text-slate-500">{d.date}</div>
-                    <div className="text-lg font-semibold">{d.rain_mm.toFixed(1)}</div>
-                  </div>
-                ))}
-              </div>}
-          </div>
+      <div className="mt-3">
+        <div className="flex items-center justify-between mb-1">
+          <h4 className="font-semibold">Pluie (passé & prévisions)</h4>
+          <div className="text-xs text-slate-500">Σ passé: {sum(past).toFixed(1)} mm · Σ prévisions: {sum(forecast).toFixed(1)} mm</div>
         </div>
-      )}
+        <div className="h-56 md:h-64"><canvas ref={chartCanvasRef}></canvas></div>
+      </div>
 
-      <p className="text-xs text-slate-500 mt-2">
-        Astuce : si la pluie cumulée des 3 derniers jours &lt; 5 mm et que le dernier arrosage date de &gt; 2 jours, pense à arroser.
-      </p>
+      <p className="text-xs text-slate-500 mt-2">Astuce : si la pluie cumulée des 3 derniers jours &lt; 5 mm et que le dernier arrosage date de &gt; 2 jours, pense à arroser.</p>
     </div>
   );
 }
